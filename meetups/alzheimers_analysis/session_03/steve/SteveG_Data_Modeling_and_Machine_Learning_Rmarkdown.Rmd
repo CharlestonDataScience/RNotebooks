@@ -1,0 +1,134 @@
+---
+title: '"Data Analysis in R Part 3: Data Modeling and Machine Learning"'
+author: "Stephen Guest"
+date: "November 8, 2016"
+output: html_document
+---
+
+First things first, let's load in the caret library so that it will be available for us to use.
+
+```{r}
+library(caret)
+set.seed(1364)
+```
+
+Now we'll load in the Alzheimers data set that we've been working with in previous sessions.
+
+```{r}
+Alz <- read.csv(file.choose())
+dim(Alz)
+summary(Alz$gender)
+```
+
+Before we go on let's clean up one of our variables that has some inconsistencies
+
+```{r}
+Alz$gender <- ifelse(Alz$gender == 'female', 'Female', ifelse(Alz$gender == 'M', 'Male', ifelse(Alz$gender == 'male', 'Male', ifelse(Alz$gender == 'Female', 'Female', 'Male'))))
+Alz$gender <- as.factor(Alz$gender)
+```
+
+**Partitioning Data Into Training and Test Sets**
+Typically one of the first things we want to do before building any prediction model is to take our data and split it up into a 'training' set that will be used to teach the model and a 'test' set that will be used as part of validating the model
+
+The caret package has some really simple built in functions for partitioning data.
+Let's use **createDataPartition()** to split the Alzheimers data set into a train and test set
+
+```{r}
+samples_for_training <- createDataPartition(Alz$response, p=.75, list=F)
+training_samples <- Alz[samples_for_training,]
+test_samples <- Alz[-samples_for_training,]
+```
+
+**Ready to Build a Model**
+We're now ready to build a model using any of the machine learning algorithms that are built into caret
+
+There are >200 machine learning algorithms available in the caret package
+
+Whichever algorithm we choose we can generate a model using **train()** function
+
+```{r, message=FALSE, warning=FALSE, results="hide"}
+my_model_gbm <- train(response ~ ., data = training_samples, method = "gbm")
+```
+
+That's it.  
+We've got a model now that we can use to make predictions.
+
+Taking a look at the model we built
+
+```{r}
+my_model_gbm
+```
+
+**Generating Predictions with our model**
+Let's make some predictions using the test data set and see how the model performs
+
+To generate predictions we use the **predict()** function
+
+```{r}
+my_gbm_predictions <- predict(my_model_gbm, newdata = test_samples)
+```
+
+**Model Performance**
+Visualizing model performance with a confusion matrix!
+
+```{r}
+cMatrix_gbm <- confusionMatrix(my_gbm_predictions, test_samples$response)
+cMatrix_gbm
+```
+
+**Switching Algorithms**
+Caret makes it exceptionally easy to try a different algorithm
+
+```{r, message=FALSE, warning=FALSE}
+my_model_glm <- train(response ~ ., data = training_samples, method = "glm")
+my_glm_predictions <- predict(my_model_glm, newdata = test_samples)
+cMatrix_glm <- confusionMatrix(my_glm_predictions, test_samples$response)
+cMatrix_glm
+```
+
+**compare the two models**
+
+```{r}
+cMatrix_gbm$overall[1]
+cMatrix_glm$overall[1]
+```
+
+**Imporoving our models**
+For some algorithms to run or be optimized we might need to preprocess data
+
+```{r}
+hist(Alz$tau, breaks = 30)
+hist(Alz$age, breaks = 30)
+```
+
+**Scaling Data**
+Using the **scale()** function we can get all of our variables to have a mean of 0 and standard deviation of 1.
+
+```{r}
+tau_scaled <- scale(Alz$tau, center = TRUE)
+age_scaled <- scale(Alz$age, center = TRUE)
+hist(tau_scaled, breaks = 30)
+hist(age_scaled, breaks = 30)
+```
+
+**Dummy variables**
+Some machine learning algorithms can't handle factor variables.  They must be turned into numeric type data.  This process is referred to as creating dummy variables
+
+So which of our variables are factor variables?
+
+```{r}
+Alz_var_classes <- sapply(Alz, class)
+which(Alz_var_classes == 'factor')
+```
+
+Genotype, response and gender are all factor variables.  
+
+
+Let's see how we can turn one of them into a dummy variable using **dummyVars()** in caret
+
+```{r}
+dmy <- dummyVars(~ Genotype, data = Alz)
+dmy_df <- data.frame(predict(dmy, newdata = Alz))
+head(dmy_df)
+head(Alz$Genotype)
+```
